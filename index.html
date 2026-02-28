@@ -326,6 +326,16 @@ const SPRITES = {
         ".PBBBBWP",
         ".PPPPPP."
     ],
+    walker_rise: [
+        "........",
+        "........",
+        "........",
+        "........",
+        "........",
+        "...PP...",
+        "..PPPP..",
+        ".P....P."
+    ],
     flyer_fly1: [
         "........",
         "P......P",
@@ -424,6 +434,16 @@ const SPRITES = {
         "MMMMMMMM",
         "MWMWMWMW"
     ],
+    block_grave: [
+        "........",
+        "........",
+        "........",
+        "...MM...",
+        "..MMbM..",
+        ".MMMbbM.",
+        "MbMbbMMM",
+        "MMMMMMbM"
+    ],
     item_armor: [
         "........",
         "..BBBB..",
@@ -463,6 +483,36 @@ const SPRITES = {
         "........",
         "........",
         "........"
+    ],
+    enemy_bomb: [
+        "........",
+        "...RR...",
+        "..RyRR..",
+        "..RRRR..",
+        "..RyRR..",
+        "...RR...",
+        "........",
+        "........"
+    ],
+    boss_orb: [
+        "..RRRR..",
+        ".RyyyyR.",
+        "RyyyyyyR",
+        "RyyyyyyR",
+        "RyyyyyyR",
+        "RyyyyyyR",
+        ".RyyyyR.",
+        "..RRRR.."
+    ],
+    explosion: [
+        "R.R..R.R",
+        ".R.yy.R.",
+        "R.yyyy.R",
+        ".yyyyyy.",
+        ".yyyyyy.",
+        "R.yyyy.R",
+        ".R.yy.R.",
+        "R.R..R.R"
     ],
     door: [
         ".MMMMMM.",
@@ -523,6 +573,7 @@ const SFX = {
     break: () => SFX.playTone(100, 'sawtooth', 0.2, 0.2, 50),
     stomp: () => SFX.playTone(400, 'square', 0.15, 0.1, 200),
     enemyHit: () => SFX.playTone(200, 'square', 0.1, 0.15, 50),
+    bombExplode: () => SFX.playTone(100, 'sawtooth', 0.25, 0.2, 20),
     energy: () => {
         SFX.playTone(987.77, 'square', 0.1, 0.1); 
         setTimeout(() => SFX.playTone(1318.51, 'square', 0.3, 0.1), 80); 
@@ -559,6 +610,25 @@ const SFX = {
             step++;
         }, 105); 
     },
+    startBossBGM: () => {
+        SFX.stopBGM();
+        // Faster, more frantic notes to build tension
+        const lead = [493.88, 466.16, 493.88, 466.16, 523.25, 493.88, 523.25, 587.33];
+        const bass = [123.47, 123.47, 116.54, 116.54, 130.81, 130.81, 146.83, 146.83];
+        let step = 0;
+        bgmInterval = setInterval(() => {
+            if (GameState.current !== 'PLAYING') return;
+            
+            SFX.playTone(lead[step % 8], 'square', 0.1, 0.05);
+            SFX.playTone(bass[step % 8], 'sawtooth', 0.15, 0.1);
+
+            // Driving, double-time drum beat
+            if (step % 2 === 0) SFX.playTone(150, 'sine', 0.1, 0.4, 0.01);
+            else SFX.playTone(8000, 'square', 0.05, 0.05);
+
+            step++;
+        }, 80); // Noticeably faster tempo!
+    },
     stopBGM: () => {
         if (bgmInterval) clearInterval(bgmInterval);
     }
@@ -577,7 +647,10 @@ const GameState = {
     current: 'START',
     score: 0,
     energy: 0,
-    cameraX: 0
+    cameraX: 0,
+    bossMusicPlaying: false,
+    bossX: 9999,
+    idleSpawnTimer: 0
 };
 
 let highScores = [
@@ -673,21 +746,21 @@ touchOverlay.addEventListener('touchend', handleTouches, {passive: false});
 touchOverlay.addEventListener('touchcancel', handleTouches, {passive: false});
 
 // --- LEVEL DESIGN ---
-// G: Ground, B: Brick, ?: Energy, !: Space Suit, M: Metal, E: Walker, Y: Flyer, T: Turret, X: Boss, F: Flagpole, D: Door, H: Hint
+// G: Ground, B: Brick, ?: Energy, !: Space Suit, M: Metal, R: Grave, E: Walker, Y: Flyer, T: Turret, X: Boss, F: Flagpole, D: Door, H: Hint
 const levelMapString = [
     "                                                                                                                                ",
+    "                                 Y                                     Y                                                        ",
     "                                                                                                                                ",
-    "                                                                                                                                ",
-    "                                                                                                                                ",
+    "                                                                                           Y                                    ",
     "                                                                                                                             F  ",
     "                                                                                                     B   B   B   B   B   B   M  ",
     "                                      ?        Y              Y                                  B                           M  ",
-    "                                                                E                              B                             M  ",
+    "                            Y                                   E                              B                             M  ",
     "                               Y                                               T   H     B                                   M  ",
     "                        ?   B!B?B                  MM     E                   MMM    B                                       M  ",
     "                                                  MMM                        MMMMB                                           M  ",
     "                               E                 MMMM   Y                   MMMMM                                            M  ",
-    "               E      E                 E  E    MMMMM          E     T     MMMMMM   X       D                                M  ",
+    "         R     E      E      R          E  E    MMMMM   R      E     T     MMMMMM   X       D                                M  ",
     "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG  GGGGGGGGGGGGGGGGGGGGGGGGGGGGG                 GGGGGGGGGGGGG",
     "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG  GGGGGGGGGGGGGGGGGGGGGGGGGGGGG                 GGGGGGGGGGGGG"
 ];
@@ -698,6 +771,7 @@ let enemyProjectiles = [];
 let items = [];
 let weapons = [];
 let particles = [];
+let explosions = [];
 let hints = [];
 let player = null;
 let levelWidth = 0;
@@ -709,6 +783,7 @@ function parseLevel() {
     items = [];
     weapons = [];
     particles = [];
+    explosions = [];
     hints = [];
     levelWidth = levelMapString[0].length * TILE_SIZE;
 
@@ -721,6 +796,7 @@ function parseLevel() {
             if (char === 'G') blocks.push(new Block(px, py, 'block_ground', false, 'none'));
             else if (char === 'M') blocks.push(new Block(px, py, 'block_hard', false, 'none'));
             else if (char === 'B') blocks.push(new Block(px, py, 'block_brick', true, 'none'));
+            else if (char === 'R') blocks.push(new Block(px, py, 'block_grave', false, 'none'));
             else if (char === '?') blocks.push(new Block(px, py, 'block_question', true, 'energy'));
             else if (char === '!') blocks.push(new Block(px, py, 'block_question', true, 'armor'));
             else if (char === 'F') blocks.push(new Block(px, py, 'beacon', false, 'none'));
@@ -728,7 +804,10 @@ function parseLevel() {
             else if (char === 'E') enemies.push(new Walker(px, py));
             else if (char === 'Y') enemies.push(new Flyer(px, py));
             else if (char === 'T') enemies.push(new Turret(px, py));
-            else if (char === 'X') enemies.push(new Boss(px, py));
+            else if (char === 'X') { 
+                enemies.push(new Boss(px, py)); 
+                GameState.bossX = px; 
+            }
             else if (char === 'H') hints.push(new HintText(px, py));
         }
     }
@@ -869,35 +948,79 @@ class Weapon {
     }
 }
 
+class Explosion {
+    constructor(x, y) {
+        this.x = x - 12; // Shift back to center the large 32x32 hitbox
+        this.y = y - 12;
+        this.w = 32;
+        this.h = 32;
+        this.active = true;
+        this.timer = 12; // Frames it remains deadly
+        SFX.bombExplode();
+    }
+    update() {
+        this.timer--;
+        if (this.timer <= 0) this.active = false;
+    }
+    draw() {
+        // Flash intensely
+        if (Math.floor(this.timer / 2) % 2 === 0) {
+            drawSprite(SPRITES['explosion'], this.x, this.y);
+            drawSprite(SPRITES['explosion'], this.x + 16, this.y);
+            drawSprite(SPRITES['explosion'], this.x + 8, this.y + 16);
+        }
+    }
+}
+
 class EnemyProjectile {
-    constructor(x, y, vx, vy) {
+    constructor(x, y, vx, vy, spriteName = 'enemy_laser') {
         this.x = x; this.y = y;
-        this.w = 8; this.h = 8;
+        this.w = (spriteName === 'boss_orb') ? 12 : 8;
+        this.h = (spriteName === 'boss_orb') ? 12 : 8;
         this.vx = vx; this.vy = vy;
         this.active = true;
+        this.spriteName = spriteName;
     }
     update() {
         this.x += this.vx;
         this.y += this.vy;
         if (this.x < GameState.cameraX || this.x > GameState.cameraX + WIDTH || this.y > HEIGHT) {
             this.active = false;
+            return;
+        }
+        
+        // Bombs detect ground collisions to trigger explosions
+        if (this.spriteName === 'enemy_bomb') {
+            for (let b of blocks) {
+                if (!b.active || b.sprite === 'beacon' || b.sprite === 'door') continue;
+                if (checkRectCollision(this, b)) {
+                    this.active = false;
+                    explosions.push(new Explosion(this.x, this.y));
+                    break;
+                }
+            }
         }
     }
     draw() {
-        drawSprite(SPRITES['enemy_laser'], this.x, this.y - 4);
+        let offset = (this.spriteName === 'boss_orb') ? -2 : -4;
+        drawSprite(SPRITES[this.spriteName], this.x, this.y + offset);
     }
 }
 
 class Walker {
-    constructor(x, y) {
+    constructor(x, y, state = 'walk') {
         this.x = x; this.y = y;
         this.w = 16; this.h = 16;
-        this.vx = -0.5; this.vy = 0;
         this.active = true;
-        this.state = 'walk'; 
+        this.state = state; 
         this.type = 'walker';
         this.animTimer = 0;
         this.deadTimer = 0;
+        this.riseTimer = 30; // Time spent rising out of the ground
+        
+        // If spawned dynamically (rise), walk towards player. If placed in map, default left.
+        this.vx = (player && state === 'rise') ? (player.x > this.x ? 0.5 : -0.5) : -0.5; 
+        this.vy = 0;
     }
     update() {
         if (!this.active) return;
@@ -909,21 +1032,22 @@ class Walker {
             return;
         }
 
+        if (this.state === 'rise') {
+            this.riseTimer--;
+            if (this.riseTimer <= 0) this.state = 'walk';
+            return; // Don't move while rising
+        }
+
         this.vy += GRAVITY;
         this.animTimer++;
 
+        // Removed X Collision so they ghost through obstacles
         this.x += this.vx;
-        for (let b of blocks) {
-            if (!b.active || b.sprite === 'beacon' || b.sprite === 'door') continue;
-            if (checkRectCollision(this, b)) {
-                if (this.vx > 0) { this.x = b.x - this.w; this.vx *= -1; }
-                else if (this.vx < 0) { this.x = b.x + b.w; this.vx *= -1; }
-            }
-        }
 
         this.y += this.vy;
         for (let b of blocks) {
-            if (!b.active || b.sprite === 'beacon' || b.sprite === 'door') continue;
+            // Ignore non-solid tiles and ignore obstacles (bricks/graves) so they stay on the floor level
+            if (!b.active || b.sprite === 'beacon' || b.sprite === 'door' || b.sprite === 'block_grave' || b.sprite === 'block_brick') continue;
             if (checkRectCollision(this, b)) {
                 if (this.vy > 0) { this.y = b.y - this.h; this.vy = 0; }
             }
@@ -945,6 +1069,8 @@ class Walker {
     draw() {
         if (this.state === 'dead') {
             drawSprite(SPRITES['walker_dead'], this.x, this.y);
+        } else if (this.state === 'rise') {
+            drawSprite(SPRITES['walker_rise'], this.x, this.y);
         } else {
             let frame = (Math.floor(this.animTimer / 15) % 2 === 0) ? 'walker_walk1' : 'walker_walk2';
             drawSprite(SPRITES[frame], this.x, this.y);
@@ -985,8 +1111,14 @@ class Flyer {
 
         this.cooldown--;
         if (this.cooldown <= 0 && this.x > GameState.cameraX && this.x < GameState.cameraX + WIDTH) {
-            let dir = player.x > this.x ? 3 : -3;
-            enemyProjectiles.push(new EnemyProjectile(this.x+4, this.y+8, dir, 0));
+            if (Math.random() > 0.5) {
+                // Shoot horizontally
+                let dir = player.x > this.x ? 3 : -3;
+                enemyProjectiles.push(new EnemyProjectile(this.x+4, this.y+8, dir, 0, 'enemy_laser'));
+            } else {
+                // Drop bomb vertically
+                enemyProjectiles.push(new EnemyProjectile(this.x+4, this.y+8, 0, 2.5, 'enemy_bomb'));
+            }
             this.cooldown = Math.random() * 60 + 90;
         }
     }
@@ -1018,6 +1150,7 @@ class Turret {
         this.active = true;
         this.state = 'idle';
         this.type = 'turret';
+        this.hp = 4; // Takes 4 shots to kill
         this.cooldown = Math.random() * 60 + 60;
     }
     update() {
@@ -1027,7 +1160,7 @@ class Turret {
         this.cooldown--;
         if (this.cooldown <= 0) {
             let dir = player.x > this.x ? 3 : -3;
-            enemyProjectiles.push(new EnemyProjectile(this.x + (dir>0?16:-8), this.y + 4, dir, 0));
+            enemyProjectiles.push(new EnemyProjectile(this.x + (dir>0?16:-8), this.y + 4, dir, 0, 'enemy_laser'));
             this.cooldown = 120;
         }
     }
@@ -1067,10 +1200,10 @@ class Boss {
         this.cooldown--;
         if (this.cooldown <= 0) {
             let dir = player.x > this.x ? 3 : -3;
-            // Spread fire
-            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, 1));
-            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, 0));
-            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, -1));
+            // Spread fire using boss orbs
+            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, 1, 'boss_orb'));
+            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, 0, 'boss_orb'));
+            enemyProjectiles.push(new EnemyProjectile(this.x+16, this.y+16, dir, -1, 'boss_orb'));
             this.cooldown = 100;
         }
     }
@@ -1110,7 +1243,7 @@ class Player {
         this.dead = false;
         this.animTimer = 0;
         this.jumpForce = -8.5; 
-        this.speed = 2;
+        this.speed = 1.7; // Slightly reduced from 2.0 to make movement pacing tighter
         this.inAirJumpRelease = false;
         this.jumpConsumed = false;
         this.shootConsumed = false;
@@ -1348,6 +1481,9 @@ function initLevel() {
     GameState.score = 0;
     GameState.energy = 0;
     GameState.cameraX = 0;
+    GameState.bossMusicPlaying = false;
+    GameState.idleSpawnTimer = 0;
+    explosions = [];
     updateScoreUI();
 }
 
@@ -1356,12 +1492,35 @@ function update() {
 
     player.update();
 
+    // Check if player has reached the boss arena to trigger music change
+    if (player.x > GameState.bossX - WIDTH && !GameState.bossMusicPlaying) {
+        GameState.bossMusicPlaying = true;
+        SFX.startBossBGM();
+    }
+
+    // Dynamic Walker Spawning when Player is Idle
+    if (player.vx === 0 && player.isGrounded && !GameState.bossMusicPlaying) {
+        GameState.idleSpawnTimer++;
+        if (GameState.idleSpawnTimer > 60) { // After ~1 second of standing still
+            if (Math.random() < 0.05 && enemies.filter(e => e.type === 'walker').length < 8) {
+                let dir = Math.random() > 0.5 ? 1 : -1;
+                let spawnX = player.x + dir * (90 + Math.random() * 60); 
+                // Only spawn within bounds behind or ahead of player
+                if (spawnX > GameState.cameraX && spawnX < levelWidth - 100) {
+                    enemies.push(new Walker(spawnX, player.y, 'rise'));
+                }
+            }
+        }
+    } else {
+        GameState.idleSpawnTimer = 0; // reset if moving
+    }
+
     // Check Weapons vs Enemies
     for (let w of weapons) {
         if (!w.active) continue;
         for (let e of enemies) {
             if (e.active && e.state !== 'dead' && checkRectCollision(w, e)) {
-                if (e.type === 'boss') {
+                if (e.type === 'boss' || e.type === 'turret') {
                     e.hp--;
                     w.active = false;
                     SFX.enemyHit();
@@ -1391,6 +1550,15 @@ function update() {
         if (!enemyProjectiles[i].active) enemyProjectiles.splice(i, 1);
     }
 
+    // Explosions
+    for (let i = explosions.length - 1; i >= 0; i--) {
+        explosions[i].update();
+        if (explosions[i].active && !player.dead && checkRectCollision(explosions[i], player)) {
+            player.takeDamage();
+        }
+        if (!explosions[i].active) explosions.splice(i, 1);
+    }
+
     // Check Enemy Collisions
     for (let i = enemies.length - 1; i >= 0; i--) {
         let e = enemies[i];
@@ -1398,8 +1566,8 @@ function update() {
         if (!e.active) { enemies.splice(i, 1); continue; }
 
         if (e.state !== 'dead' && !player.dead && checkRectCollision(player, e)) {
-            // Stomp logic: player falling, and bottom of player is above middle of enemy
-            if (player.vy > 0 && player.y + player.h < e.y + (e.type === 'boss' ? 20 : 12)) {
+            // Stomp logic: player falling, and bottom of player is above middle of enemy. Turrets cannot be stomped!
+            if (player.vy > 0 && player.y + player.h < e.y + (e.type === 'boss' ? 20 : 12) && e.type !== 'turret') {
                 if (e.type === 'boss') {
                     e.hp--;
                     player.vy = -6; // Higher bounce off boss
@@ -1411,6 +1579,10 @@ function update() {
                 }
             } else {
                 player.takeDamage();
+                // Add a small bounce if the player hit a turret from above, to make the penalty clear
+                if (player.vy > 0 && e.type === 'turret' && player.y + player.h < e.y + 12) {
+                    player.vy = -4; 
+                }
             }
         }
     }
@@ -1452,6 +1624,7 @@ function draw() {
     items.forEach(i => i.draw());
     weapons.forEach(w => w.draw());
     enemyProjectiles.forEach(ep => ep.draw());
+    explosions.forEach(ex => ex.draw());
     
     enemies.forEach(e => {
         if (e.x >= drawBounds.x && e.x <= drawBounds.x + drawBounds.w) e.draw();
