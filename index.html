@@ -17,6 +17,8 @@
             font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
             touch-action: none; /* Prevent scrolling on mobile */
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         #game-container {
@@ -99,6 +101,7 @@
             display: flex;
             width: 95%;
             justify-content: space-between;
+            pointer-events: none;
         }
 
         /* --- VIRTUAL GAMEPAD FOR MOBILE --- */
@@ -109,7 +112,7 @@
             left: 0;
             width: 100%;
             justify-content: space-between;
-            padding: 0 20px;
+            padding: 0 15px;
             box-sizing: border-box;
             z-index: 20;
         }
@@ -120,30 +123,55 @@
                 display: flex;
             }
             #score-display {
-                font-size: 16px; /* slightly smaller top UI for mobile */
+                font-size: 16px; 
             }
             h1 { font-size: 24px; }
             p { font-size: 14px; }
         }
 
+        .dpad {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
         .touch-btn {
             background: rgba(0, 0, 0, 0.4);
-            border: 2px solid rgba(255, 255, 255, 0.6);
-            color: white;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            color: rgba(255, 255, 255, 0.8);
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            font-size: 18px;
+            width: 65px;
+            height: 65px;
+            font-size: 24px;
             font-weight: bold;
             user-select: none;
             touch-action: none;
             display: flex;
             justify-content: center;
             align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
         }
-        .touch-btn:active {
-            background: rgba(255, 255, 255, 0.4);
+        
+        /* Specific Action Button Placements */
+        #btn-shoot {
+            margin-bottom: 0px;
+        }
+        #btn-jump {
+            margin-bottom: 30px; /* Offset diagonally like a real controller */
+        }
+
+        /* Dynamically applied via JS */
+        .active-btn {
+            background: rgba(255, 255, 255, 0.6) !important;
+            color: black;
+            transform: scale(0.92);
         }
     </style>
 </head>
@@ -192,11 +220,11 @@
 
         <!-- Virtual Gamepad Overlay -->
         <div id="touch-controls">
-            <div style="display: flex; gap: 10px;">
+            <div class="dpad">
                 <div class="touch-btn" id="btn-left">◀</div>
                 <div class="touch-btn" id="btn-right">▶</div>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div class="action-btns">
                 <div class="touch-btn" id="btn-shoot">B</div>
                 <div class="touch-btn" id="btn-jump">A</div>
             </div>
@@ -206,7 +234,7 @@
 <script>
 /**
  * ALIEN EXTERMINATOR 3 - HYBRID ENGINE
- * Grid-based platformer + Projectile combat + Armor system + Boss/Flag + Touch UI
+ * Grid-based platformer + Projectile combat + Boss/Flag + Touch UI
  */
 
 // --- C64 / NES APPROXIMATE PALETTE ---
@@ -328,7 +356,7 @@ const SPRITES = {
         ".AAAAAA.",
         ".AAAAAA."
     ],
-    boss_idle: [ // Renders 32x32 (16x16 grid)
+    boss_idle: [
         "......PPPP......",
         ".....PyPPyP.....",
         "....PPPPPPPP....",
@@ -396,7 +424,7 @@ const SPRITES = {
         "MMMMMMMM",
         "MWMWMWMW"
     ],
-    item_armor: [ // Space Suit 
+    item_armor: [
         "........",
         "..BBBB..",
         ".BAAAAB.",
@@ -406,7 +434,7 @@ const SPRITES = {
         "........",
         "........"
     ],
-    item_energy: [ // Battery for Energy
+    item_energy: [
         "........",
         "...MM...",
         "..QMMQ..",
@@ -446,7 +474,7 @@ const SPRITES = {
         ".MBBBBM.",
         ".MMMMMM."
     ],
-    beacon: [ // Flagpole
+    beacon: [
         "W.......",
         "W.RRRR..",
         "W.R..R..",
@@ -489,7 +517,7 @@ const SFX = {
     jump: () => SFX.playTone(300, 'square', 0.3, 0.1, 800),
     shoot: () => {
         SFX.playTone(1200, 'sawtooth', 0.1, 0.1, 100);
-        SFX.playTone(800, 'square', 0.1, 0.05, 50); // dual tone layer
+        SFX.playTone(800, 'square', 0.1, 0.05, 50); 
     },
     bump: () => SFX.playTone(100, 'square', 0.1, 0.1, 50),
     break: () => SFX.playTone(100, 'sawtooth', 0.2, 0.2, 50),
@@ -522,25 +550,14 @@ const SFX = {
         bgmInterval = setInterval(() => {
             if (GameState.current !== 'PLAYING') return;
             
-            // Lead Melody
             if (lead[step % 16] > 0) SFX.playTone(lead[step % 16], 'square', 0.15, 0.05);
-            
-            // Bassline
-            if (step % 2 === 0) {
-                SFX.playTone(bass[Math.floor(step/2) % 8], 'sawtooth', 0.2, 0.1);
-            }
+            if (step % 2 === 0) SFX.playTone(bass[Math.floor(step/2) % 8], 'sawtooth', 0.2, 0.1);
 
-            // Drum Beat (Kick and Hat)
-            if (step % 4 === 0) {
-                // Kick
-                SFX.playTone(150, 'sine', 0.1, 0.4, 0.01);
-            } else if (step % 2 !== 0) {
-                // Hi-Hat
-                SFX.playTone(8000, 'square', 0.05, 0.05);
-            }
+            if (step % 4 === 0) SFX.playTone(150, 'sine', 0.1, 0.4, 0.01);
+            else if (step % 2 !== 0) SFX.playTone(8000, 'square', 0.05, 0.05);
 
             step++;
-        }, 105); // Faster, more driving tempo
+        }, 105); 
     },
     stopBGM: () => {
         if (bgmInterval) clearInterval(bgmInterval);
@@ -605,44 +622,55 @@ window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') keys.Shoot = false;
 });
 
-// Touch UI Listeners
-const btnLeft = document.getElementById('btn-left');
-const btnRight = document.getElementById('btn-right');
-const btnJump = document.getElementById('btn-jump');
-const btnShoot = document.getElementById('btn-shoot');
+// Dynamic Sliding Touch Logic
+const touchButtons = ['btn-left', 'btn-right', 'btn-jump', 'btn-shoot'];
 
-function bindTouch(element, keyName) {
-    if (!element) return;
-    element.addEventListener('touchstart', (e) => {
+function handleTouches(e) {
+    if (e.cancelable && e.type !== 'touchend' && e.type !== 'touchcancel') {
         e.preventDefault(); 
-        if (keyName === 'Jump') {
-             if (GameState.current !== 'PLAYING') {
-                 triggerMenuAction();
-                 return;
-             }
-             if (!keys.Jump) keys.Jump = true;
-        } else if (keyName === 'Shoot') {
-             if (GameState.current === 'PLAYING' && !keys.Shoot) keys.Shoot = true;
-        } else {
-             keys[keyName] = true;
+    }
+
+    let touchStates = { Left: false, Right: false, Jump: false, Shoot: false };
+    
+    // Reset visual state
+    touchButtons.forEach(id => document.getElementById(id)?.classList.remove('active-btn'));
+
+    for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        if (target && target.classList.contains('touch-btn')) {
+            target.classList.add('active-btn');
+            if (target.id === 'btn-left') touchStates.Left = true;
+            if (target.id === 'btn-right') touchStates.Right = true;
+            if (target.id === 'btn-jump') {
+                touchStates.Jump = true;
+                if (GameState.current !== 'PLAYING') triggerMenuAction();
+            }
+            if (target.id === 'btn-shoot') {
+                touchStates.Shoot = true;
+            }
         }
-    }, {passive: false});
-    
-    element.addEventListener('touchend', (e) => {
-        e.preventDefault(); 
-        keys[keyName] = false;
-    }, {passive: false});
-    
-    element.addEventListener('touchcancel', (e) => {
-        e.preventDefault(); 
-        keys[keyName] = false;
-    }, {passive: false});
+    }
+
+    // Only override keyboard keys if we are actually touching the screen
+    if (e.touches.length > 0 || e.type === 'touchend' || e.type === 'touchcancel') {
+        keys.Left = touchStates.Left;
+        keys.Right = touchStates.Right;
+        
+        if (touchStates.Jump && !keys.Jump && GameState.current === 'PLAYING') keys.Jump = true;
+        if (!touchStates.Jump) keys.Jump = false;
+
+        if (touchStates.Shoot && !keys.Shoot && GameState.current === 'PLAYING') keys.Shoot = true;
+        if (!touchStates.Shoot) keys.Shoot = false;
+    }
 }
 
-bindTouch(btnLeft, 'Left');
-bindTouch(btnRight, 'Right');
-bindTouch(btnJump, 'Jump');
-bindTouch(btnShoot, 'Shoot');
+const touchOverlay = document.getElementById('touch-controls');
+touchOverlay.addEventListener('touchstart', handleTouches, {passive: false});
+touchOverlay.addEventListener('touchmove', handleTouches, {passive: false});
+touchOverlay.addEventListener('touchend', handleTouches, {passive: false});
+touchOverlay.addEventListener('touchcancel', handleTouches, {passive: false});
 
 // --- LEVEL DESIGN ---
 // G: Ground, B: Brick, ?: Energy, !: Space Suit, M: Metal, E: Walker, Y: Flyer, T: Turret, X: Boss, F: Flagpole, D: Door, H: Hint
@@ -1075,6 +1103,7 @@ class Player {
         this.vx = 0; this.vy = 0;
         this.hasArmor = true;
         this.isGrounded = false;
+        this.coyoteTimer = 0;
         this.facingRight = true;
         this.invincibleTimer = 0;
         this.weaponCooldown = 0;
@@ -1101,10 +1130,18 @@ class Player {
         else if (keys.Right) { this.vx = this.speed; this.facingRight = true; }
         else { this.vx = 0; }
 
+        // Coyote Time tracking
+        if (this.isGrounded) {
+            this.coyoteTimer = 6; // Allow jump for ~6 frames after walking off a ledge
+        } else if (this.coyoteTimer > 0) {
+            this.coyoteTimer--;
+        }
+
         // Jumping 
-        if (keys.Jump && this.isGrounded && !this.jumpConsumed) {
+        if (keys.Jump && (this.isGrounded || this.coyoteTimer > 0) && !this.jumpConsumed) {
             this.vy = this.jumpForce;
             this.isGrounded = false;
+            this.coyoteTimer = 0;
             this.inAirJumpRelease = false;
             this.jumpConsumed = true;
             SFX.jump();
@@ -1131,7 +1168,7 @@ class Player {
         for (let b of blocks) {
             if (!b.active) continue;
             
-            // Exit Triggers (No solid physical collision)
+            // Exit Triggers
             if (b.sprite === 'beacon' && checkRectCollision(this, b)) {
                 winGame(true); // Flag Bonus!
                 return;
@@ -1187,7 +1224,7 @@ class Player {
     }
 
     attack() {
-        this.weaponCooldown = 15;
+        this.weaponCooldown = 10; // Slightly faster for mobile forgiveness
         SFX.shoot();
         weapons.push(new Weapon(this.x + (this.facingRight ? 16 : -12), this.y + 8, this.facingRight));
     }
