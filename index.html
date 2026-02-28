@@ -16,19 +16,24 @@
             color: white;
             font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
+            touch-action: none; /* Prevent scrolling on mobile */
         }
 
         #game-container {
             position: relative;
-            width: 640px;
-            height: 480px; /* 4:3 aspect ratio */
+            width: 100%;
+            max-width: 640px;
+            aspect-ratio: 4 / 3;
+            height: auto;
             box-shadow: 0 0 20px rgba(0,0,0,0.8);
             background-color: #5C94FC; /* Classic SMB Sky Blue */
+            touch-action: none;
         }
 
         canvas {
             width: 100%;
             height: 100%;
+            display: block;
             image-rendering: pixelated;
         }
 
@@ -58,6 +63,7 @@
             color: #FFFFFF;
             font-size: 16px;
             line-height: 1.5;
+            margin: 5px 0;
         }
 
         .blink {
@@ -94,6 +100,51 @@
             width: 95%;
             justify-content: space-between;
         }
+
+        /* --- VIRTUAL GAMEPAD FOR MOBILE --- */
+        #touch-controls {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 20;
+        }
+        
+        /* Only show on touch devices */
+        @media (pointer: coarse) {
+            #touch-controls {
+                display: flex;
+            }
+            #score-display {
+                font-size: 16px; /* slightly smaller top UI for mobile */
+            }
+            h1 { font-size: 24px; }
+            p { font-size: 14px; }
+        }
+
+        .touch-btn {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            user-select: none;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .touch-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -105,21 +156,22 @@
             <span>ENERGY: <span id="energy">0</span></span>
             <span>SECTOR 1-1</span>
         </div>
+        
         <div id="ui-layer">
             <div id="start-screen">
                 <h1>ALIEN EXTERMINATOR 3</h1>
                 <p>THE HYBRID MISSION</p>
-                <p>Arrow Up: Jump<br>Space: Shoot<br>Stomp or Shoot Aliens!<br>Collect Energy & Space Suits!</p>
-                <div class="blink" id="start-btn">PRESS ENTER TO START</div>
+                <p>Up / A: Jump<br>Space / B: Shoot<br>Stomp or Shoot Aliens!</p>
+                <div class="blink" id="start-btn">PRESS ENTER OR TAP 'A'</div>
             </div>
             <div id="game-over-screen" class="hidden">
                 <h1 style="color: #FF0000;">GAME OVER</h1>
                 <div id="go-name-input-section" class="hidden">
                     <p>ENTER INITIALS:</p>
                     <input type="text" id="go-initials" maxlength="3" autocomplete="off" style="font-family: 'Courier New'; font-size: 24px; width: 80px; text-transform: uppercase; text-align: center; background: #000; color: #FFF; border: 2px solid #FFF;">
-                    <p class="blink" style="font-size: 16px;">PRESS ENTER TO SUBMIT</p>
+                    <p class="blink" style="font-size: 16px;">PRESS ENTER OR TAP 'A'</p>
                 </div>
-                <div class="blink" id="restart-btn">PRESS ENTER TO RESTART</div>
+                <div class="blink" id="restart-btn">PRESS ENTER OR TAP 'A'</div>
             </div>
             <div id="win-screen" class="hidden">
                 <h1 style="color: #00FF00;">SECTOR CLEARED!</h1>
@@ -127,14 +179,26 @@
                 <div id="win-name-input-section" class="hidden">
                     <p>ENTER INITIALS:</p>
                     <input type="text" id="win-initials" maxlength="3" autocomplete="off" style="font-family: 'Courier New'; font-size: 24px; width: 80px; text-transform: uppercase; text-align: center; background: #000; color: #FFF; border: 2px solid #FFF;">
-                    <p class="blink" style="font-size: 16px;">PRESS ENTER TO SUBMIT</p>
+                    <p class="blink" style="font-size: 16px;">PRESS ENTER OR TAP 'A'</p>
                 </div>
-                <div class="blink" id="win-restart-btn">PRESS ENTER TO PLAY AGAIN</div>
+                <div class="blink" id="win-restart-btn">PRESS ENTER OR TAP 'A'</div>
             </div>
             <div id="highscore-screen" class="hidden">
                 <h1 style="color: #FFCE00;">HIGH SCORES</h1>
                 <div id="highscore-list" style="margin: 20px 0; font-size: 20px; text-align: left;"></div>
-                <div class="blink" id="hs-restart-btn">PRESS ENTER TO PLAY AGAIN</div>
+                <div class="blink" id="hs-restart-btn">PRESS ENTER OR TAP 'A'</div>
+            </div>
+        </div>
+
+        <!-- Virtual Gamepad Overlay -->
+        <div id="touch-controls">
+            <div style="display: flex; gap: 10px;">
+                <div class="touch-btn" id="btn-left">◀</div>
+                <div class="touch-btn" id="btn-right">▶</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="touch-btn" id="btn-shoot">B</div>
+                <div class="touch-btn" id="btn-jump">A</div>
             </div>
         </div>
     </div>
@@ -142,7 +206,7 @@
 <script>
 /**
  * ALIEN EXTERMINATOR 3 - HYBRID ENGINE
- * Grid-based platformer + Projectile combat + Armor system + Boss/Flag
+ * Grid-based platformer + Projectile combat + Armor system + Boss/Flag + Touch UI
  */
 
 // --- C64 / NES APPROXIMATE PALETTE ---
@@ -507,6 +571,20 @@ let highScores = [
 
 const keys = { Left: false, Right: false, Up: false, Down: false, Jump: false, Shoot: false };
 
+// --- INPUT HANDLING ---
+function triggerMenuAction() {
+    SFX.init();
+    if (GameState.current === 'START' || GameState.current === 'HIGHSCORE') {
+        startGame();
+    } else if (GameState.current === 'GAMEOVER') {
+        if (GameState.score > 0) submitScore('go-initials');
+        else startGame();
+    } else if (GameState.current === 'WIN') {
+        submitScore('win-initials');
+    }
+}
+
+// Keyboard Listeners
 window.addEventListener('keydown', (e) => {
     if (e.code === 'ArrowLeft') keys.Left = true;
     if (e.code === 'ArrowRight') keys.Right = true;
@@ -517,14 +595,7 @@ window.addEventListener('keydown', (e) => {
         if (!keys.Shoot && GameState.current === 'PLAYING') keys.Shoot = true;
     }
     if (e.code === 'Enter') {
-        if (GameState.current === 'START' || GameState.current === 'HIGHSCORE') {
-            startGame();
-        } else if (GameState.current === 'GAMEOVER') {
-            if (GameState.score > 0) submitScore('go-initials');
-            else startGame();
-        } else if (GameState.current === 'WIN') {
-            submitScore('win-initials');
-        }
+        if (GameState.current !== 'PLAYING') triggerMenuAction();
     }
 });
 window.addEventListener('keyup', (e) => {
@@ -534,20 +605,59 @@ window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') keys.Shoot = false;
 });
 
+// Touch UI Listeners
+const btnLeft = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+const btnJump = document.getElementById('btn-jump');
+const btnShoot = document.getElementById('btn-shoot');
+
+function bindTouch(element, keyName) {
+    if (!element) return;
+    element.addEventListener('touchstart', (e) => {
+        e.preventDefault(); 
+        if (keyName === 'Jump') {
+             if (GameState.current !== 'PLAYING') {
+                 triggerMenuAction();
+                 return;
+             }
+             if (!keys.Jump) keys.Jump = true;
+        } else if (keyName === 'Shoot') {
+             if (GameState.current === 'PLAYING' && !keys.Shoot) keys.Shoot = true;
+        } else {
+             keys[keyName] = true;
+        }
+    }, {passive: false});
+    
+    element.addEventListener('touchend', (e) => {
+        e.preventDefault(); 
+        keys[keyName] = false;
+    }, {passive: false});
+    
+    element.addEventListener('touchcancel', (e) => {
+        e.preventDefault(); 
+        keys[keyName] = false;
+    }, {passive: false});
+}
+
+bindTouch(btnLeft, 'Left');
+bindTouch(btnRight, 'Right');
+bindTouch(btnJump, 'Jump');
+bindTouch(btnShoot, 'Shoot');
+
 // --- LEVEL DESIGN ---
 // G: Ground, B: Brick, ?: Energy, !: Space Suit, M: Metal, E: Walker, Y: Flyer, T: Turret, X: Boss, F: Flagpole, D: Door, H: Hint
 const levelMapString = [
     "                                                                                                                                ",
     "                                                                                                                                ",
+    "                                                                                                                                ",
+    "                                                                                                                                ",
     "                                                                                                                             F  ",
-    "                                                                                                                             M  ",
-    "                                                                                                                             M  ",
-    "                                                                                                  B  B  B  B  B  B           M  ",
-    "                                      ?        Y              Y                               B                              M  ",
-    "                                                                E                         B                                  M  ",
-    "                               Y                                               T   H  B                                      M  ",
-    "                        ?   B!B?B                  MM     E                   MMM B                                          M  ",
-    "                                                  MMM                        MMMM                                            M  ",
+    "                                                                                                     B   B   B   B   B   B   M  ",
+    "                                      ?        Y              Y                                  B                           M  ",
+    "                                                                E                              B                             M  ",
+    "                               Y                                               T   H     B                                   M  ",
+    "                        ?   B!B?B                  MM     E                   MMM    B                                       M  ",
+    "                                                  MMM                        MMMMB                                           M  ",
     "                               E                 MMMM   Y                   MMMMM                                            M  ",
     "               E      E                 E  E    MMMMM          E     T     MMMMMM   X       D                                M  ",
     "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG   GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG  GGGGGGGGGGGGGGGGGGGGGGGGGGGGG                 GGGGGGGGGGGGG",
